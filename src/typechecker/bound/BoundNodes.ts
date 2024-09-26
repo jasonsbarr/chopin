@@ -27,4 +27,6 @@ export enum BoundNodes {
   BoundTuple = "BoundTuple",
   BoundVector = "BoundVector",
   BoundForStatement = "BoundForStatement",
+  BoundTuplePattern = "BoundTuplePattern",
+  BoundObjectPattern = "BoundObjectPattern",
 }

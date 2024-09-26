@@ -3,6 +3,7 @@ import { ASTNode } from "../syntax/parser/ast/ASTNode";
 import { CallExpression } from "../syntax/parser/ast/CallExpression";
 import { VariableDeclaration } from "../syntax/parser/ast/VariableDeclaration";
 import { BoundAssignmentExpression } from "../typechecker/bound/BoundAssignmentExpression";
+import { BoundASTNode } from "../typechecker/bound/BoundASTNode";
 import { BoundBinaryOperation } from "../typechecker/bound/BoundBinaryOperation";
 import { BoundBlock } from "../typechecker/bound/BoundBlock";
 import { BoundBooleanLiteral } from "../typechecker/bound/BoundBooleanLiteral";
@@ -19,6 +20,7 @@ import { BoundMemberExpression } from "../typechecker/bound/BoundMemberExpressio
 import { BoundNilLiteral } from "../typechecker/bound/BoundNilLiteral";
 import { BoundNodes } from "../typechecker/bound/BoundNodes";
 import { BoundObjectLiteral } from "../typechecker/bound/BoundObjectLiteral";
+import { BoundObjectPattern } from "../typechecker/bound/BoundObjectPattern";
 import { BoundParenthesizedExpression } from "../typechecker/bound/BoundParenthesizedExpression";
 import { BoundProgramNode } from "../typechecker/bound/BoundProgramNode";
 import { BoundReturnStatement } from "../typechecker/bound/BoundReturnStatement";
@@ -27,6 +29,7 @@ import { BoundStringLiteral } from "../typechecker/bound/BoundStringLiteral";
 import { BoundSymbolLiteral } from "../typechecker/bound/BoundSymbolLiteral";
 import { BoundTree } from "../typechecker/bound/BoundTree";
 import { BoundTuple } from "../typechecker/bound/BoundTuple";
+import { BoundTuplePattern } from "../typechecker/bound/BoundTuplePattern";
 import { BoundUnaryOperation } from "../typechecker/bound/BoundUnaryOperation";
 import { BoundVariableDeclaration } from "../typechecker/bound/BoundVariableDeclaration";
 import { BoundVector } from "../typechecker/bound/BoundVector";
@@ -44,7 +47,7 @@ export class Emitter {
     return this.emitNode(program);
   }
 
-  private emitNode(node: ASTNode): string {
+  private emitNode(node: BoundASTNode): string {
     switch (node.kind) {
       case BoundNodes.BoundProgramNode:
         return this.emitProgram(node as BoundProgramNode);
@@ -101,6 +104,10 @@ export class Emitter {
         return this.emitSliceExpression(node as BoundSliceExpression);
       case BoundNodes.BoundForStatement:
         return this.emitForStatement(node as BoundForStatement);
+      case BoundNodes.BoundTuplePattern:
+        return this.emitTuplePattern(node as BoundTuplePattern);
+      case BoundNodes.BoundObjectPattern:
+        return this.emitObjectPattern(node as BoundObjectPattern);
       default:
         throw new Error(`Unknown bound node type ${node.kind}`);
     }
@@ -182,7 +189,7 @@ export class Emitter {
     return code;
   }
 
-  private emitCallExpression(node: CallExpression): string {
+  private emitCallExpression(node: BoundCallExpression): string {
     let code = `${this.emitNode(node.func)}`;
     code += `(${node.args.map((arg) => this.emitNode(arg)).join(", ")})`;
     return code;
@@ -191,15 +198,15 @@ export class Emitter {
   private emitAssignment(node: BoundAssignmentExpression): string {
     return `${this.emitNode(node.left)} ${node.operator} ${this.emitNode(
       node.right
-    )}`;
+    )};\n`;
   }
 
   private emitVariableDeclaration(node: BoundVariableDeclaration): string {
     if (node.constant) {
-      return `const ${this.emitNode(node.assignment)};\n`;
+      return `const ${this.emitNode(node.assignment)}`;
     }
 
-    return `let ${this.emitNode(node.assignment)};\n`;
+    return `let ${this.emitNode(node.assignment)}`;
   }
 
   private emitFunctionDeclaration(node: BoundFunctionDeclaration): string {
@@ -218,7 +225,7 @@ export class Emitter {
         // this case is redundant, but I'm putting it here for emphasis
         if (expr.kind === BoundNodes.BoundReturnStatement) {
           return this.emitNode(expr);
-        } else if (i === a.length - 1 && node.statement) {
+        } else if (i === a.length - 1 && !node.statement) {
           return `return ${this.emitNode(expr)};`;
         }
         return this.emitNode(expr);
@@ -296,5 +303,34 @@ export class Emitter {
     code += "}\n";
 
     return code;
+  }
+
+  private emitTuplePattern(node: BoundTuplePattern): string {
+    return `[${node.names
+      .map((n, i, a) => {
+        if (node.rest && i === a.length - 1) {
+          return `...${(n as BoundIdentifier).name}`;
+        } else if (n instanceof BoundTuplePattern) {
+          return this.emitTuplePattern(n);
+        } else if (n instanceof BoundObjectPattern) {
+          return this.emitObjectPattern(n);
+        }
+
+        return n.name;
+      })
+      .join(", ")}]`;
+  }
+
+  private emitObjectPattern(node: BoundObjectPattern): string {
+    return `{${node.names
+      .map((n, i, a) => {
+        if (node.rest && i === a.length - 1) {
+          return `...${(n as BoundIdentifier).name}`;
+        }
+        // handle cases with nested tuple and object properties
+
+        return (n as BoundIdentifier).name;
+      })
+      .join(", ")}}`;
   }
 }
